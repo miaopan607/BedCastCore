@@ -8,8 +8,16 @@ public final class Immutable {
     public static <K,V> Map<K,V> map(Map<K,V> source) {
         return source.isEmpty() ? Collections.emptyMap() : Collections.unmodifiableMap(new LinkedHashMap<>(source));
     }
+    @SuppressWarnings("unchecked")
     public static <T> List<T> list(Collection<T> source) {
-        return source.isEmpty() ? Collections.emptyList() : Collections.unmodifiableList(new ArrayList<>(source));
+        if (source instanceof FrozenList) return (List<T>)source;
+        return source.isEmpty() ? Collections.emptyList() : new FrozenList<>(source);
+    }
+    private static final class FrozenList<T> extends AbstractList<T> implements RandomAccess {
+        private final List<T> entries;
+        FrozenList(Collection<T> entries) { this.entries = new ArrayList<>(entries); }
+        @Override public T get(int index) { return entries.get(index); }
+        @Override public int size() { return entries.size(); }
     }
     public static Map<String,Object> json(Map<String,?> source) {
         if (source.isEmpty()) return Collections.emptyMap();
