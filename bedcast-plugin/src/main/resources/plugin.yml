@@ -1,5 +1,5 @@
 name: BedCast
-version: 4{project.version}
+version: ${project.version}
 main: dev.bedcast.bukkit.BedCastPlugin
 softdepend: [HMO-Bedwars]
 description: 多竞技场赛事直播数据服务
