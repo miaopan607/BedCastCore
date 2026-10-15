@@ -27,7 +27,13 @@ public final class BroadcastConfig {
         if(section!=null)for(Map.Entry<String,Object> entry:section.getValues(false).entrySet()) {
             if(!(entry.getValue() instanceof ConfigurationSection))throw new IllegalArgumentException("matches."+entry.getKey()+" 必须为对象");
             ConfigurationSection match=(ConfigurationSection)entry.getValue();
-            matches.put(entry.getKey(),new MatchSettings(match.getString("match-id"),match.getInt("current-round",1),match.getInt("total-rounds",1)));
+            try {
+                matches.put(entry.getKey(),new MatchSettings(match.contains("match-id")?string(match,"match-id"):null,
+                        match.contains("current-round")?integer(match,"current-round"):1,
+                        match.contains("total-rounds")?integer(match,"total-rounds"):1));
+            } catch(IllegalArgumentException error) {
+                throw new IllegalArgumentException("matches."+entry.getKey()+": "+error.getMessage(),error);
+            }
         }
     }
     public MatchSettings match(String arena){return matches.getOrDefault(arena,MatchSettings.single());}
