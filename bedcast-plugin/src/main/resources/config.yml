@@ -1,0 +1,18 @@
+api:
+  enabled: true
+  host: 127.0.0.1
+  port: 8080
+  token: ""
+  allowed-origins: []
+websocket:
+  enabled: true
+  host: 127.0.0.1
+  port: 8081
+snapshot:
+  interval-ticks: 5
+events:
+  capacity-per-arena: 2048
+provider:
+  type: hmo
+matches: {}
+debug: false
