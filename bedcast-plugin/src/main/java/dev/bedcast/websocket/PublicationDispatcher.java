@@ -31,7 +31,8 @@ public final class PublicationDispatcher implements Consumer<PublicationBatch>,A
         offer(()->{if(sessions.get(socket)!=session)return;
             GameSnapshot snapshot=latest.get(arenaId);
             if(snapshot==null || !snapshot.available){socket.close(1011,"赛事采集不可用");return;}
-            session.send(message("SNAPSHOT",snapshot,snapshot));session.ready=socket.isOpen()&&!socket.isClosing();
+            String first=message("SNAPSHOT",snapshot,snapshot);
+            session.send(first,first.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);session.ready=socket.isOpen()&&!socket.isClosing();
         });
     }
     public void unregister(WebSocket socket){sessions.remove(socket);}
@@ -41,7 +42,8 @@ public final class PublicationDispatcher implements Consumer<PublicationBatch>,A
                 "timestamp",snapshot.timestamp,"gameTime",snapshot.game==null?0:snapshot.game.elapsedTime,"data",payload));
     }
     private void broadcast(String arenaId,String message) {
-        for(ClientSession session:sessions.values())if(session.ready&&session.arenaId.equals(arenaId))session.send(message);
+        int bytes=message.getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+        for(ClientSession session:sessions.values())if(session.ready&&session.arenaId.equals(arenaId))session.send(message,bytes);
     }
     private void dispatch(PublicationBatch batch) {
         GameSnapshot s=batch.snapshot;
@@ -75,5 +77,8 @@ public final class PublicationDispatcher implements Consumer<PublicationBatch>,A
         } catch(InterruptedException e){Thread.currentThread().interrupt();}
         finally{for(ClientSession session:sessions.values())session.socket.close(1001,"服务关闭");sessions.clear();}
     }
-    @Override public void close(){running=false;thread.interrupt();}
+    @Override public void close(){
+        running=false;thread.interrupt();
+        try{thread.join(2000);}catch(InterruptedException e){Thread.currentThread().interrupt();}
+    }
 }

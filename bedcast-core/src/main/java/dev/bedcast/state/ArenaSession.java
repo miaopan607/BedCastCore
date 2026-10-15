@@ -109,7 +109,6 @@ public final class ArenaSession {
                 emit(EventType.BED_DESTROYED,now,raw,data("playerUuid",null,"teamId",null,"victimTeamId",t.teamId));
             teams.put(t.teamId,value.equals(old)?old:value);
         }
-        if(ended && current!=null) { players=new LinkedHashMap<>(current.players); teams=new LinkedHashMap<>(current.teams); }
         int aliveTeams=0; for(TeamState t:teams.values()) if(!t.eliminated && t.alivePlayers>0) aliveTeams++;
         GamePhase phase=ended?GamePhase.ENDED:(gameEnded?GamePhase.ENDING:raw.gameState);
         GameState sessionGame=new GameState(arenaId,gameId,matchId,raw.mapName,phase,raw.startTime,time(now,raw),round,rounds,raw.gameMode,

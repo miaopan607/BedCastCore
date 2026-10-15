@@ -31,4 +31,32 @@ class LifecycleTest {
         assertEquals(GamePhase.ENDED,ended.game.gameState);assertEquals(2,ended.teams.get("red").kills);
         assertEquals(ending.game.elapsedTime,ended.game.elapsedTime);assertEquals("red",ended.game.winnerTeamId);
     }
+    @Test void terminalCaptureAndImmediateNextArenaKeepEventsInTheirOwnGame() {
+        boolean[] restarting={false};
+        int[] captures={0};
+        BedWarsProvider provider=new BedWarsProvider() {
+            public String getId(){return "fixture";}
+            public void start(ProviderEventSink sink){}
+            public void close(){}
+            public Collection<ArenaDescriptor> getArenas(){
+                return restarting[0]?Arrays.asList(new ArenaDescriptor("A","A",1),new ArenaDescriptor("A","A",2))
+                        :Collections.singletonList(new ArenaDescriptor("A","A",1));
+            }
+            public Optional<ArenaState> capture(String id){
+                return Optional.of(CollectionTest.arena("A",CollectionTest.player(P,restarting[0]?(captures[0]++==0?3:0):2,true)));
+            }
+        };
+        SnapshotStore store=new SnapshotStore();List<PublicationBatch> published=new ArrayList<>();
+        SnapshotManager manager=new SnapshotManager(provider,store,new StateManager(10,id->StateManager.MatchSettings.single()),()->{},published::add,(id,e)->fail(e));
+        manager.collect();String oldGame=store.get("A").gameId;
+        manager.accept(ProviderEvent.ended("A",System.currentTimeMillis()));
+        manager.accept(new ProviderEvent("A",EventType.PLAYER_JOIN,System.currentTimeMillis(),Immutable.data("uuid",P)));
+        restarting[0]=true;manager.collect();
+        GameSnapshot terminal=published.get(1).snapshot;
+        assertEquals(GamePhase.ENDED,terminal.game.gameState);assertEquals(3,terminal.players.get(P).kills);
+        assertTrue(terminal.events.stream().noneMatch(e->e.eventType==EventType.PLAYER_JOIN));
+        assertNotEquals(oldGame,store.get("A").gameId);
+        assertEquals(EventType.PLAYER_JOIN,store.get("A").events.get(0).eventType);
+        assertEquals(0,store.get("A").players.get(P).kills);
+    }
 }

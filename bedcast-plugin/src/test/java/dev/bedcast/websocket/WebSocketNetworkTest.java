@@ -47,4 +47,30 @@ class WebSocketNetworkTest {
             socketA.sendClose(WebSocket.NORMAL_CLOSURE,"done").get(5,TimeUnit.SECONDS);socketB.sendClose(WebSocket.NORMAL_CLOSURE,"done").get(5,TimeUnit.SECONDS);
         }
     }
+    @Test void initialSnapshotUsesDispatcherVersionAndCannotSkipQueuedEvents()throws Exception {
+        SnapshotStore store=new SnapshotStore();GameSnapshot first=snapshot("A",1,Collections.emptyList());store.publish(first);
+        try(PublicationDispatcher dispatcher=new PublicationDispatcher(store,new JsonCodec());
+            WebSocketServer server=new WebSocketServer(new InetSocketAddress("127.0.0.1",0),store,new TokenAuthenticator("",Collections.emptyList()),dispatcher,e->{})) {
+            EventManager events=new EventManager("A","game-A",20);
+            events.append(EventType.ITEM_PURCHASE,10,1,Immutable.data("itemId","wool"));
+            GameSnapshot second=snapshot("A",2,events.history());
+            events.append(EventType.TEAM_UPGRADE,11,1,Immutable.data("upgradeId","sharpness"));
+            GameSnapshot third=snapshot("A",3,events.history());store.publish(third);
+            server.startAndAwait();Listener listener=new Listener();
+            WebSocket socket=HttpClient.newHttpClient().newWebSocketBuilder().subprotocols("bedcast.v1")
+                    .buildAsync(URI.create("ws://127.0.0.1:"+server.getPort()+"/api/v1/ws?arena=A"),listener).get(5,TimeUnit.SECONDS);
+            JsonObject initial=listener.next();
+            assertEquals("SNAPSHOT",initial.get("type").getAsString());
+            assertEquals(1,initial.getAsJsonObject("data").get("revision").getAsLong());
+            dispatcher.accept(new PublicationBatch(first,second,second.events));
+            dispatcher.accept(new PublicationBatch(second,third,Collections.singletonList(third.events.get(1))));
+            List<String> received=new ArrayList<>();long sequence=initial.get("sequence").getAsLong();
+            for(int i=0;i<4;i++) {
+                JsonObject message=listener.next();assertTrue(message.get("sequence").getAsLong()>sequence);sequence=message.get("sequence").getAsLong();
+                received.add(message.get("type").getAsString());
+            }
+            assertEquals(Arrays.asList("ITEM_PURCHASE","GAME_STATE_UPDATE","TEAM_UPGRADE","GAME_STATE_UPDATE"),received);
+            socket.sendClose(WebSocket.NORMAL_CLOSURE,"done").get(5,TimeUnit.SECONDS);
+        }
+    }
 }

@@ -41,6 +41,10 @@ public final class SnapshotManager implements ProviderEventSink {
                     pending=boundary<0?pending:pending.subList(boundary+1,pending.size()); session=null;
                 }
                 if(session==null) session=states.create(descriptor,now);
+                for(int i=0;i<pending.size();i++) if(pending.get(i).ended) {
+                    for(int j=i+1;j<pending.size();j++) states.accept(pending.get(j));
+                    pending=pending.subList(0,i+1);break;
+                }
                 commit(session,session.update(observation.get(),pending,now));
             } catch(Exception error) { fail(id,error,now); }
         }
@@ -55,6 +59,7 @@ public final class SnapshotManager implements ProviderEventSink {
     }
     private void fail(String id,Exception error,long now) {
         GameSnapshot before=store.get(id);
+        if(before!=null&&!before.available)return;
         GameSnapshot failed=before==null?new GameSnapshot(id,null,0,now,0,now,null,Collections.emptyMap(),Collections.emptyMap(),Collections.emptyList(),false):before.unavailable();
         store.publish(failed); publish.accept(new PublicationBatch(before,failed,Collections.emptyList())); errors.accept(id,error);
     }
