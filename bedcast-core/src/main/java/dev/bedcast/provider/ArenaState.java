@@ -6,7 +6,8 @@ public final class ArenaState {
     public final GameState game;
     public final Map<String,PlayerState> players;
     public final Map<String,TeamState> teams;
-    public ArenaState(GameState game, Map<String,PlayerState> players, Map<String,TeamState> teams) {
-        this.game = game; this.players = Immutable.map(players); this.teams = Immutable.map(teams);
+    public final ArenaMap map;
+    public ArenaState(GameState game, Map<String,PlayerState> players, Map<String,TeamState> teams, ArenaMap map) {
+        this.game = game; this.players = Immutable.map(players); this.teams = Immutable.map(teams); this.map = map;
     }
 }

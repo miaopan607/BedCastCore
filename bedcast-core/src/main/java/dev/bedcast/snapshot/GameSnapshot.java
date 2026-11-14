@@ -10,13 +10,15 @@ public final class GameSnapshot {
     public final Map<String,PlayerState> players;
     public final transient List<BroadcastEvent> events;
     public final transient boolean available;
+    public final transient ArenaMap map;
     public GameSnapshot(String arenaId, String gameId, long revision, long timestamp, long eventCursor, long coverageStartTime,
-                        GameState game, Map<String,TeamState> teams, Map<String,PlayerState> players, List<BroadcastEvent> events, boolean available) {
+                        GameState game, Map<String,TeamState> teams, Map<String,PlayerState> players, List<BroadcastEvent> events, boolean available, ArenaMap map) {
         this.arenaId=arenaId; this.gameId=gameId; this.revision=revision; this.timestamp=timestamp;
         this.eventCursor=eventCursor; this.coverageStartTime=coverageStartTime; this.game=game;
         this.teams=Immutable.map(teams); this.players=Immutable.map(players); this.events=Immutable.list(events); this.available=available;
+        this.map=map;
     }
     public GameSnapshot unavailable() {
-        return new GameSnapshot(arenaId,gameId,revision,timestamp,eventCursor,coverageStartTime,game,teams,players,events,false);
+        return new GameSnapshot(arenaId,gameId,revision,timestamp,eventCursor,coverageStartTime,game,teams,players,events,false,map);
     }
 }

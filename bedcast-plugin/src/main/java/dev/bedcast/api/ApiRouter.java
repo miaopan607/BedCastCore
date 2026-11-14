@@ -1,7 +1,7 @@
 package dev.bedcast.api;
 import dev.bedcast.snapshot.*;
 import dev.bedcast.event.*;
-import dev.bedcast.model.Immutable;
+import dev.bedcast.model.*;
 import dev.bedcast.util.Query;
 import java.net.URI;
 import java.util.*;
@@ -26,12 +26,14 @@ public final class ApiRouter {
                     "mapName",s.game==null?null:s.game.mapName,"gameState",s.game==null?null:s.game.gameState.name(),"available",s.available));
             return ok(summaries);
         }
-        if(!(route.equals("game")||route.equals("snapshot")||route.equals("teams")||route.startsWith("teams/")||route.equals("players")||route.startsWith("players/")||route.equals("events")||route.equals("events/recent")))
+        if(!(route.equals("map")||route.equals("positions")||route.equals("game")||route.equals("snapshot")||route.equals("teams")||route.startsWith("teams/")||route.equals("players")||route.startsWith("players/")||route.equals("events")||route.equals("events/recent")))
             return error(404,"NOT_FOUND","接口不存在");
         String arena=q.get("arena"); if(arena==null||arena.isEmpty())return error(400,"MISSING_ARENA","必须指定 arena");
         GameSnapshot s=store.get(arena);
         if(s==null)return error(404,"ARENA_NOT_FOUND","竞技场不存在");
         if(!s.available)return error(503,"SNAPSHOT_UNAVAILABLE","竞技场采集暂不可用");
+        if(route.equals("map"))return map(s,q);
+        if(route.equals("positions"))return positions(s);
         if(route.equals("game"))return ok(s.game);
         if(route.equals("snapshot"))return ok(s);
         if(route.equals("teams"))return ok(s.teams);
@@ -50,5 +52,43 @@ public final class ApiRouter {
             Object data=conflict?Immutable.data("gameId",s.gameId,"oldestSequence",s.events.isEmpty()?1:s.events.get(0).sequence):null;
             return new Result(conflict?409:400,ApiResponse.error(e.code,"事件游标或查询范围无效",data));
         } catch(NumberFormatException e){return error(400,"INVALID_QUERY","查询数字无效");}
+    }
+    private static Result map(GameSnapshot s,Map<String,String> q) {
+        int offset,limit;
+        try {
+            offset=Integer.parseInt(q.getOrDefault("offset","0"));limit=Integer.parseInt(q.getOrDefault("limit","8"));
+        }catch(NumberFormatException e){return error(400,"INVALID_QUERY","查询数字无效");}
+        if(offset<0||limit<1||limit>16)return error(400,"INVALID_QUERY","地图分页范围无效");
+        String requested=q.get("mapId");
+        if(offset>0&&(requested==null||requested.isEmpty()))return error(400,"MISSING_MAP_ID","继续读取地图必须指定 mapId");
+        ArenaMap map=s.map;
+        if(map!=null&&requested!=null&&!requested.equals(map.mapId))
+            return new Result(409,ApiResponse.error("MAP_CHANGED","竞技场地图已更换",Immutable.data("gameId",s.gameId,"mapId",map.mapId)));
+        if(map==null||map.status==ArenaMap.Status.PREPARING)return error(503,"MAP_NOT_READY","竞技场初始地图尚未准备完成");
+        switch(map.status) {
+            case INVALID_CONFIG:return error(503,"MAP_CONFIG_INVALID","竞技场地图范围或等待区配置无效");
+            case INITIAL_STATE_MISSED:return error(503,"MAP_INITIAL_STATE_UNAVAILABLE","未取得开打前的完整初始地图");
+            case CAPTURE_FAILED:return error(503,"MAP_CAPTURE_FAILED","竞技场初始地图采集失败");
+            default:break;
+        }
+        int total=map.chunks.size();
+        if(offset>total)return error(400,"INVALID_QUERY","地图分页范围无效");
+        int next=offset+Math.min(limit,total-offset);
+        return ok(Immutable.data("arenaId",s.arenaId,"gameId",s.gameId,"mapId",map.mapId,"world",map.world,
+                "minecraftVersion","1.8.8","encoding","legacy-rle-u16le-v1","capturedAt",map.capturedAt,
+                "bounds",map.bounds,"excludedWaitingRegion",map.excludedWaitingRegion,
+                "totalChunks",total,"offset",offset,"nextOffset",next,"hasMore",next<total,"chunks",map.chunks.subList(offset,next)));
+    }
+    private static Result positions(GameSnapshot s) {
+        Map<String,Object> players=new LinkedHashMap<>();
+        GamePhase phase=s.game.gameState;
+        if(phase==GamePhase.WAITING||phase==GamePhase.COUNTDOWN||phase==GamePhase.RUNNING) {
+            for(PlayerState p:s.players.values()) {
+                if(!Boolean.TRUE.equals(p.extensions.get("participant"))||!Boolean.TRUE.equals(p.extensions.get("participating"))||
+                        !p.online||!p.alive||p.spectator||p.respawning||p.position==null)continue;
+                players.put(p.uuid,Immutable.data("uuid",p.uuid,"name",p.name,"team",p.team,"position",p.position,"yaw",p.yaw,"pitch",p.pitch));
+            }
+        }
+        return ok(Immutable.data("arenaId",s.arenaId,"gameId",s.gameId,"revision",s.revision,"sampledAt",s.timestamp,"players",players));
     }
 }

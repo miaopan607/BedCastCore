@@ -9,17 +9,19 @@ import org.bukkit.*;
 import org.bukkit.entity.Player;
 import org.bukkit.event.HandlerList;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 import java.util.*;
 import java.util.function.BooleanSupplier;
 
 public final class HmoBedWarsProvider implements BedWarsProvider {
     static final class Context {
         final IArena arena;final long generation;
+        final HmoMapCapture map;
         final Map<String,PlayerState> last=new LinkedHashMap<>();
         final Set<String> finalDeaths=new HashSet<>(),eliminated=new HashSet<>(),disconnected=new HashSet<>();
         final Map<String,Integer> generators=new HashMap<>();
         GamePhase phase;boolean terminal;
-        Context(IArena arena,long generation){this.arena=arena;this.generation=generation;phase=HmoStateMapper.phase(arena);}
+        Context(IArena arena,long generation,java.util.logging.Logger logger){this.arena=arena;this.generation=generation;phase=HmoStateMapper.phase(arena);map=new HmoMapCapture(arena,logger);}
     }
     private final JavaPlugin plugin;
     final BedWars api;
@@ -32,6 +34,8 @@ public final class HmoBedWarsProvider implements BedWarsProvider {
     private final HmoEventListener listener;
     private ProviderEventSink sink;
     private long generation;
+    private final Deque<Context> mapQueue=new ArrayDeque<>();
+    private BukkitTask mapTask;
     private HmoBedWarsProvider(JavaPlugin plugin,BedWars api){this.plugin=plugin;this.api=api;mapper=new HmoStateMapper(api);listener=new HmoEventListener(this);}
     public static BedWarsProvider connect(JavaPlugin plugin) {
         org.bukkit.plugin.Plugin core=Bukkit.getPluginManager().getPlugin("HMO-Bedwars");
@@ -42,10 +46,26 @@ public final class HmoBedWarsProvider implements BedWarsProvider {
     }
     private static void mainThread(){if(!Bukkit.isPrimaryThread())throw new IllegalStateException("HMO 采集必须在主线程");}
     @Override public String getId(){return "hmo";}
-    @Override public void start(ProviderEventSink sink){mainThread();this.sink=sink;Bukkit.getPluginManager().registerEvents(listener,plugin);}
+    @Override public void start(ProviderEventSink sink) {
+        mainThread();this.sink=sink;Bukkit.getPluginManager().registerEvents(listener,plugin);
+        mapTask=Bukkit.getScheduler().runTaskTimer(plugin,this::captureMaps,1L,1L);
+    }
+    private void captureMaps() {
+        if(mapQueue.isEmpty())return;
+        long start=System.nanoTime();
+        for(int advanced=0;advanced<4&&!mapQueue.isEmpty();advanced++) {
+            Context c=mapQueue.removeFirst();
+            if(!c.terminal&&contexts.get(c.arena.getArenaName())==c&&c.map.current().status==ArenaMap.Status.PREPARING) {
+                c.map.advanceChunk();
+                if(c.map.current().status==ArenaMap.Status.PREPARING)mapQueue.addLast(c);
+            }
+            // 区块加载不可抢占，预算仅在完整区块之间检查。
+            if(System.nanoTime()-start>=2_000_000L)break;
+        }
+    }
     Context context(IArena arena) {
         String id=arena.getArenaName();Context current=contexts.get(id);
-        if(current==null||current.arena!=arena){current=new Context(arena,++generation);contexts.put(id,current);}return current;
+        if(current==null||current.arena!=arena){current=new Context(arena,++generation,plugin.getLogger());contexts.put(id,current);mapQueue.addLast(current);}return current;
     }
     void emit(IArena arena,EventType type,long timestamp,Map<String,Object> data){mainThread();context(arena);sink.accept(new ProviderEvent(arena.getArenaName(),type,timestamp,data));}
     void defer(BooleanSupplier confirmed,Runnable action){deferred.add(()->{if(confirmed.getAsBoolean())action.run();});}
@@ -65,6 +85,7 @@ public final class HmoBedWarsProvider implements BedWarsProvider {
     void terminate(String arenaId) {
         Context c=contexts.get(arenaId);
         if(c!=null&&!c.terminal) {
+            c.map.stopBeforeRunning();
             terminalStates.put(arenaId,mapper.capture(c));
             terminalDescriptors.put(arenaId,new ArenaDescriptor(arenaId,c.arena.getDisplayName(),c.generation));
             c.terminal=true;sink.accept(ProviderEvent.ended(arenaId,System.currentTimeMillis()));
@@ -89,5 +110,5 @@ public final class HmoBedWarsProvider implements BedWarsProvider {
         for(TeamState team:state.teams.values())if(team.eliminated && c.eliminated.add(team.teamId))emit(c.arena,EventType.TEAM_ELIMINATED,System.currentTimeMillis(),Immutable.data("teamId",team.teamId));
         return Optional.of(state);
     }
-    @Override public void close(){mainThread();HandlerList.unregisterAll(listener);deferred.clear();quitting.clear();contexts.clear();terminalStates.clear();terminalDescriptors.clear();sink=null;}
+    @Override public void close(){mainThread();if(mapTask!=null){mapTask.cancel();mapTask=null;}HandlerList.unregisterAll(listener);mapQueue.clear();deferred.clear();quitting.clear();contexts.clear();terminalStates.clear();terminalDescriptors.clear();sink=null;}
 }

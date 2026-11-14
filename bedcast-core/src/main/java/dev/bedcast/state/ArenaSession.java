@@ -113,14 +113,14 @@ public final class ArenaSession {
         GamePhase phase=ended?GamePhase.ENDED:(gameEnded?GamePhase.ENDING:raw.gameState);
         GameState sessionGame=new GameState(arenaId,gameId,matchId,raw.mapName,phase,raw.startTime,time(now,raw),round,rounds,raw.gameMode,
                 teams.size(),aliveTeams,winner,raw.diamondLevel,raw.emeraldLevel,raw.nextDiamondUpgrade,raw.nextEmeraldUpgrade,raw.extensions);
-        current=new GameSnapshot(arenaId,gameId,++revision,now,events.cursor(),coverageStartTime,sessionGame,teams,players,events.history(),true);
+        current=new GameSnapshot(arenaId,gameId,++revision,now,events.cursor(),coverageStartTime,sessionGame,teams,players,events.history(),true,observed.map);
         return current;
     }
     private static Integer add(Integer left,Integer right) { return left==null||right==null?null:left+right; }
     public GameSnapshot finish(List<ProviderEvent> pending,long now) {
         if(current==null) return null;
         List<ProviderEvent> copy=new ArrayList<>(pending); copy.add(ProviderEvent.ended(arenaId,now));
-        return update(new ArenaState(current.game,current.players,current.teams),copy,now);
+        return update(new ArenaState(current.game,current.players,current.teams,current.map),copy,now);
     }
     public List<BroadcastEvent> drain() { List<BroadcastEvent> result=new ArrayList<>(additions); additions.clear(); return result; }
     public GameSnapshot current() { return current; }

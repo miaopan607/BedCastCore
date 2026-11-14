@@ -27,6 +27,7 @@ final class HmoEventListener implements Listener {
     @EventHandler(priority=EventPriority.MONITOR)
     public void state(GameStateChangeEvent e) {
         HmoBedWarsProvider.Context c=provider.context(e.getArena());GamePhase phase=HmoStateMapper.phase(e.getArena());
+        if(phase==GamePhase.RUNNING)c.map.stopBeforeRunning();
         if(c.phase!=GamePhase.RUNNING && phase==GamePhase.RUNNING)provider.emit(e.getArena(),EventType.GAME_START,System.currentTimeMillis(),Collections.emptyMap());c.phase=phase;
     }
     @EventHandler(priority=EventPriority.MONITOR)

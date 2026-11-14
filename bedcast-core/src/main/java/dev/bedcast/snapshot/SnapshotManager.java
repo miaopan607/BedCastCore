@@ -60,7 +60,7 @@ public final class SnapshotManager implements ProviderEventSink {
     private void fail(String id,Exception error,long now) {
         GameSnapshot before=store.get(id);
         if(before!=null&&!before.available)return;
-        GameSnapshot failed=before==null?new GameSnapshot(id,null,0,now,0,now,null,Collections.emptyMap(),Collections.emptyMap(),Collections.emptyList(),false):before.unavailable();
+        GameSnapshot failed=before==null?new GameSnapshot(id,null,0,now,0,now,null,Collections.emptyMap(),Collections.emptyMap(),Collections.emptyList(),false,null):before.unavailable();
         store.publish(failed); publish.accept(new PublicationBatch(before,failed,Collections.emptyList())); errors.accept(id,error);
     }
 }

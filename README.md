@@ -139,6 +139,8 @@ REST 使用插件内置的 Undertow 服务，超时设置只作用于该服务�
 | `GET /api/v1/teams/<teamId>?arena=<id>` | 按队伍 ID 获取队伍状态 |
 | `GET /api/v1/players?arena=<id>` | 获取该局所有选手 |
 | `GET /api/v1/players/<uuid>?arena=<id>` | 按 UUID 获取选手状态 |
+| `GET /api/v1/map?arena=<id>&offset=0&limit=8` | 分页获取开打前固定的三维地图，不包含选手位置 |
+| `GET /api/v1/positions?arena=<id>` | 获取在线、存活且仍在参赛的实时位置标记 |
 | `GET /api/v1/events?arena=<id>&after=0&limit=100` | 从事件游标之后分页读取事件 |
 | `GET /api/v1/events/recent?arena=<id>&limit=20` | 读取最近事件 |
 
@@ -149,6 +151,24 @@ Authorization: Bearer <token>
 ```
 
 事件游标按单局递增。响应中的 `nextCursor` 可用于下一次 `/events` 请求；查询已结束的局或已从有界事件窗口淘汰的游标时会返回 `409`，此时重新获取快照并从新游标继续。
+
+### 初始地图与实时位置
+
+地图在 WAITING/COUNTDOWN 阶段按区块分批采集，范围采用 HMO 世界边界及世界完整高度 `[0, getMaxHeight())`。等待区采用 HMO `waiting.Pos1/Pos2` 的三维盒，六个边界均为最小值包含、最大值不包含；仅该盒内输出 AIR，不移除下方地形，也不修改世界。主线程每 Tick 全局最多采集 4 个区块，区块之间检查 2 ms 软预算，单个区块加载不可抢占。比赛不会等待地图采集。
+
+`/map` 仅在完整采集后返回地图。`data` 包含 `arenaId`、`gameId`、`mapId`、`world`、`minecraftVersion`（`1.8.8`）、`encoding`（`legacy-rle-u16le-v1`）、`capturedAt`、`bounds`、`excludedWaitingRegion`、`totalChunks`、`offset`、`nextOffset`、`hasMore`、`chunks`。两个范围对象均含 `minX/minY/minZ/maxX/maxY/maxZ`。
+
+- `offset` 默认 `0`，`limit` 默认 `8`，允许 `1–16`，单位为区块；`offset == totalChunks` 返回空页。区块按 Z、X 排序，X 最快，支持负坐标。
+- 首次请求取得 `mapId`，后续页必须带回，例如 `/api/v1/map?arena=<id>&mapId=<mapId>&offset=8&limit=8`。换局后旧 ID 返回 `409 MAP_CHANGED`，`data` 给出当前 `gameId/mapId`，应从第一页重取。
+- 无效分页返回 `400 INVALID_QUERY`，续页缺少 ID 返回 `400 MISSING_MAP_ID`。准备中返回 `503 MAP_NOT_READY`；范围配置无效、错过完整初始状态、采集异常分别返回 `MAP_CONFIG_INVALID`、`MAP_INITIAL_STATE_UNAVAILABLE`、`MAP_CAPTURE_FAILED`。失败状态保留到下一 generation。
+- 区块为 `{x,z,sections}`；空区块的 `sections` 为 `[]`。区段为 `{sectionY,blocks}`，`sectionY` 为 `0–15`，省略的区段全为 AIR。
+- `blocks` 是标准 Base64。解码后每 4 字节为两个无符号小端 16 位整数 `length,state`；展开后恰好 4096 个方块，索引为 `(localY << 8) | (localZ << 4) | localX`。`state = (legacyBlockId << 4) | (data & 15)`，AIR 为 `0`。不包含光照、实体、方块实体 NBT 或生物群系。
+
+READY 后地图不随搭建、破坏或床状态更新；新 generation 使用新 `mapId`。完整地图不进入 `/snapshot`、WebSocket 首帧或状态增量。
+
+`/positions` 的 `data` 为 `{arenaId,gameId,revision,sampledAt,players}`，其中 `players` 按 UUID 索引，每项为 `{uuid,name,team,position:{world,x,y,z},yaw,pitch}`。坐标和朝向保留原值，`sampledAt` 是快照采样时间，不是响应时间。更新频率沿用 `snapshot.interval-ticks`（默认 5 Tick），不依赖地图是否可用。
+
+位置标记只包含 `participant/participating` 均为 true、online、alive、非 spectator、非 respawning 且有位置的选手；ENDING/ENDED 返回空对象。断线、退场、重生与观战的历史统计仍可通过 `/players` 查询。
 
 ## WebSocket
 

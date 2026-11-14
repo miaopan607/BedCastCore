@@ -78,7 +78,7 @@ final class HmoStateMapper {
         GameState game=new GameState(arena.getArenaName(),null,null,arena.getDisplayName(),phase,start,start==null?0:Math.max(0,(System.currentTimeMillis()-start)/1000),1,1,arena.getGroup(),teams.size(),aliveTeams,
                 id(arena.getWinner()),arena.getDiamondTier(),arena.getEmeraldTier(),phase==GamePhase.RUNNING&&arena.getDiamondTier()<3?Math.max(0,arena.getUpgradeDiamondsCount()):null,
                 phase==GamePhase.RUNNING&&arena.getEmeraldTier()<3?Math.max(0,arena.getUpgradeEmeraldsCount()):null,Collections.emptyMap());
-        return new ArenaState(game,players,teams);
+        return new ArenaState(game,players,teams,context.map.current());
     }
     private static int level(Map<String,Integer> values,String key){Integer value=values.get(key);return value==null?0:value+1;}
 }

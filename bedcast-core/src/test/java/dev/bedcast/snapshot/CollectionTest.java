@@ -21,7 +21,7 @@ class CollectionTest {
         Map<String,PlayerState> p=new LinkedHashMap<>(); for(PlayerState player:players)p.put(player.uuid,player);
         TeamState t=new TeamState("red","red","Red","RED",true,false,players.length,players.length,0,0,0,0,false,0,0,0,Collections.emptyList(),null,Collections.emptyMap());
         GameState g=new GameState(id,null,null,id,GamePhase.RUNNING,System.currentTimeMillis()-10_000,10,1,1,"solo",1,1,null,1,1,60,60,Collections.emptyMap());
-        return new ArenaState(g,p,Collections.singletonMap("red",t));
+        return new ArenaState(g,p,Collections.singletonMap("red",t),null);
     }
     static final class Provider implements BedWarsProvider {
         final Map<String,ArenaState> arenas=new LinkedHashMap<>(); long generation=1; boolean fail;

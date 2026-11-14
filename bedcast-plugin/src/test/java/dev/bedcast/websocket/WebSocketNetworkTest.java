@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class WebSocketNetworkTest {
     private static GameSnapshot snapshot(String arena,long revision,List<BroadcastEvent> events) {
         GameState game=new GameState(arena,"game-"+arena,"match",arena,GamePhase.RUNNING,0L,revision,1,1,"solo",0,0,null,1,1,10,10,Collections.emptyMap());
-        return new GameSnapshot(arena,game.gameId,revision,System.currentTimeMillis(),events.size(),0,game,Collections.emptyMap(),Collections.emptyMap(),events,true);
+        return new GameSnapshot(arena,game.gameId,revision,System.currentTimeMillis(),events.size(),0,game,Collections.emptyMap(),Collections.emptyMap(),events,true,null);
     }
     static final class Listener implements WebSocket.Listener {
         final BlockingQueue<JsonObject> messages=new LinkedBlockingQueue<>();final StringBuilder frame=new StringBuilder();
